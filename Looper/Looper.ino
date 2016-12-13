@@ -1,47 +1,15 @@
 /*
-  Example playing samples encoded with Huffman compression.
+  This is the main file for the looper.  We load in 4 samples, "bass", "clap", "ride", and "bells"
+  that are encoding using Mozzi's audio2huff.py each in their respective header file.  
+  Using Mozzi's EventDelay class we are able to replay a particular sample every *del* milliseconds.
+  Every time a user enters a new sample, we create a new SoundEvent that plays that sample every *del*
+  milliseconds where *del* is determined by the potentiometer on the board.
 
-  Demonstrates the SampleHuffman class.
-  SampleHuffman, most of this explanation, and the audio2huff.py script are adapted from "audioout",
-  an Arduino sketch by Thomas Grill, 2011 http//grrrr.org.
+  Mozzi:
+  http://sensorium.github.io/Mozzi/
 
-  Huffman decoding is used on sample differentials,
-  saving 50-70% of space for 8 bit data, depending on the sample rate.
-
-  This implementation just plays back one sample each time next() is called, with no
-  speed or other adjustments.  It's slow, so it's likely you will only be able to play one sound at a time.
-
-  Audio data, Huffman decoder table, sample rate and bit depth are defined
-  in a sounddata.h header file.  This file can be generated for a sound file with the
-  accompanying Python script audio2huff.py, in Mozzi/extras/python/
-
-  Invoke with:
-  python audio2huff.py --sndfile=arduinosnd.wav --hdrfile=sounddata.h --bits=8 --name=soundtablename
-
-  You can resample and dither your audio file with SOX,
-  e.g. to 8 bits depth @ Mozzi's 16384 Hz  sample rate:
-  sox fullglory.wav -b 8 -r 16384 arduinosnd.wav
-
-  Alternatively you can export a sound from Audacity, which seems to have less noticeable or no dithering,
-  using Project Rate 16384 Hz and these output options:
-  Other uncompressed files, Header: WAV(Microsoft), Encoding: Unsigned 8 bit PCM
-
-  The header file contains two lengthy arrays:
-  One is "SOUNDDATA" which must fit into Flash RAM (available in total: 32k for ATMega328)
-  The other is "HUFFMAN" which must also fit into Flash RAM
-
-  Circuit:
-  Audio output on digital pin 9 on a Uno or similar, or
-  DAC/A14 on Teensy 3.1, or
-  check the README or http://sensorium.github.com/Mozzi/
-
-  Mozzi help/discussion/announcements:
-  https://groups.google.com/forum/#!forum/mozzi-users
-
-  Tim Barrass 2013, CC by-nc-sa.
 */
 
-//#include <ADC.h>  // Teensy 3.1 uncomment this line and install http://github.com/pedvide/ADC
 #include <MozziGuts.h>
 #include <SampleHuffman.h>
 
@@ -52,51 +20,57 @@
 #include <EventDelay.h>
 #include "SoundEvent.cpp"
 
-
-
-//SampleHuffman umpah(UMPAH_SOUNDDATA,UMPAH_HUFFMAN,UMPAH_SOUNDDATA_BITS);
+//Samples converted using audio2huff.py. SampleHuffman is a Mozzi built in class.
 SampleHuffman *bass = new SampleHuffman(BASS_SOUNDDATA, BASS_HUFFMAN, BASS_SOUNDDATA_BITS);
 SampleHuffman *clap = new SampleHuffman(CLAP_SOUNDDATA, CLAP_HUFFMAN, CLAP_SOUNDDATA_BITS);
 SampleHuffman *ride = new SampleHuffman(RIDE_SOUNDDATA, RIDE_HUFFMAN, RIDE_SOUNDDATA_BITS);
 SampleHuffman *bells = new SampleHuffman(BELLS_SOUNDDATA, BELLS_HUFFMAN, BELLS_SOUNDDATA_BITS);
 
-
+//Button states for listening to user input
 byte bassButtonState = 1;
 byte clapButtonState = 1;
 byte rideButtonState = 1;
 byte bellsButtonState = 1;
 
-
-byte tail = 0;
+// TRIGGERS is an array of size CAPACITY that contains placeholder SoundEvents.  When a user adds
+// a new sample, the SoundEvent at TRIGGERS[tail] is updated to include that sample.
+// At every run through updateControl() changes trigger_ptr which determines which
+// SoundEvent it's testing for.  
+// That is, on the first run through it's checking if TRIGGERS[0]->ready() is true to play that sound.  
+// On the second run through it's checking TRIGGERS[1]->ready(), etc.  
+// UpdateControl() runs at 64hz by default.
 const byte CAPACITY = 8;
-byte triggers_so_far = 0;
+byte tail = 0;
 SoundEvent *TRIGGERS[CAPACITY];
+byte trigger_ptr = 0; 
 
-byte trigger_ptr = 0;
-EventDelay kTempo_LED;
-EventDelay kLED_duration;
+
+EventDelay kTempo_LED; //Delay for turning on the LED giving user tempo feedback
+EventDelay kLED_duration; //Delay for turning off the LED
 
 void setup() {
-  pinMode(4, INPUT_PULLUP);
-  pinMode(5, INPUT_PULLUP);
-  pinMode(6, INPUT_PULLUP);
-  pinMode(7, INPUT_PULLUP);
-  pinMode(10, OUTPUT);
-//  Serial.begin(9600);
+  pinMode(4, INPUT_PULLUP); //bass
+  pinMode(5, INPUT_PULLUP); //clap
+  pinMode(6, INPUT_PULLUP); //ride
+  pinMode(7, INPUT_PULLUP); //bells
+  pinMode(10, OUTPUT); // tempo_LED
 
+  //Initalize the TRIGGERS array.
   for (int i = 0; i < CAPACITY; i++) {
     TRIGGERS[i] = new SoundEvent();
-//    Serial.println(TRIGGERS[i]->isNull());
   }
 
-//  Serial.println("begin");
+  // Start the control loop at 64hz
   startMozzi(64);
-  kLED_duration.set(100);
+  kLED_duration.set(100); //LED should only flash for 100 milliseconds
 }
 
 
 void updateControl() {
-  int del = map(mozziAnalogRead(A0), 0, 1023, 3000, 8000);
+  //Read the delay from the user
+  int del = map(mozziAnalogRead(A0), 0, 1023, 3000, 8000); 
+
+  //Controls the blinking of the LED as the user changes the value of *del*
   if(kTempo_LED.ready()) {
     digitalWrite(10,HIGH);
     kLED_duration.start();
@@ -105,6 +79,8 @@ void updateControl() {
   if(kLED_duration.ready()) {
     digitalWrite(10,LOW);
   }
+
+  //Test for user inputs as long as we haven't already reached capacity
   if (tail != CAPACITY) {
     handleBass(TRIGGERS[tail], del);
     handleClap(TRIGGERS[tail], del);
@@ -113,6 +89,7 @@ void updateControl() {
   }
 
 
+  //If the current trigger isn't null and is ready, then play it's sample and restart it's timer.
   if (!TRIGGERS[trigger_ptr]->isNull()) {
     if (TRIGGERS[trigger_ptr]->ready()) {
       TRIGGERS[trigger_ptr]->onTriggered();
@@ -120,23 +97,27 @@ void updateControl() {
     }
 
   }
+
+  //Increment trigger_ptr
   trigger_ptr = (trigger_ptr + 1) % tail;
 }
 
-
+//updateAudio runs 16384 times a second.
 int updateAudio() {
+  //Add up the signals of each sample
   int asig = (int)(bass->next() + clap->next() + ride->next() + bells->next());
+  //If the sum is out of audible range, clip it to be within [-244,243]
   if (asig > 243) asig = 243;
   if (asig < -244) asig = -244;
   return asig;
 }
 
-
+//Not used apart from calling audioHook() which handles the 
 void loop() {
   audioHook();
 }
 
-
+//The following "handleX" functions listen to user input and initalize the SoundEvent in the TRIGGERS array
 void handleBass(SoundEvent *se, int del) {
   if (bassButtonState != digitalRead(4)) {
     bassButtonState = digitalRead(4);
@@ -151,7 +132,6 @@ void handleBass(SoundEvent *se, int del) {
     }
   }
 }
-
 
 void handleClap(SoundEvent *se, int del) {
   if (clapButtonState != digitalRead(5)) {

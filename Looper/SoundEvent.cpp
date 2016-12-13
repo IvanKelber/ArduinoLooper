@@ -1,14 +1,16 @@
+/*
+  SoundEvent class.  Takes in a pointer to a SampleHuffman object and a delay time.
+*/
+
 #include <MozziGuts.h>
 #include <EventDelay.h>
 #include <SampleHuffman.h>
 
-
-
 class SoundEvent {
-
   
   public:
     SoundEvent() {
+      //Null constructor
       _null = true;
       _del = 100;
     }
@@ -27,24 +29,21 @@ class SoundEvent {
       _del = del;
       _kTriggerDelay.start(_del);
     }
-
     
     bool ready() {
       return _kTriggerDelay.ready();
     }
     
-
     void onTriggered() {
       _sample->start();
-//      Serial.println("triggered");
     }
+    
     void setDelay(int del) {
       _del = del;
     }
     int getDelay() {
       return _del;
     }
-
 
     void setSample(SampleHuffman *sample) {
       _sample = sample;
@@ -66,12 +65,15 @@ class SoundEvent {
       return _kTriggerDelay;
     }
 
+
+    //Creates the assignment operator
     SoundEvent SoundEvent::operator=( const SoundEvent& rhs ) {
       _null = rhs.isNull();
       _sample = rhs.getSample();
       _del = rhs.getDelay();
       return *this;
     }
+    
   private:
     bool _null = true;
     SampleHuffman *_sample;
