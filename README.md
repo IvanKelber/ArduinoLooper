@@ -13,7 +13,8 @@ I have certain limitations imposed on me by the Mozzi library.  Most notably I h
 
 **Use**
 
-To use hook up the program to an Arduino Uno by:
+Before beginning it's important that you download the Mozzi library and place it in the correct location. Afterwards you can begin connecting to your circuit.
+You can hook up the program to an Arduino Uno by:
 
   * Port 4-7 are linked to buttons
   * Port 9 is linked to a speaker or audio jack output.  I also use a potentiometer here to control volume.
